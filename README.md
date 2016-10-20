@@ -1,10 +1,13 @@
 # WHOData
-WHO Mortality Data
+## World Health Origanisation's (WHO) Mortality Data
 
-In this document, the steps to *tidy* the [World Health Organisation's (WHO)](www.who.int) mortality data for use in R are documented. The following steps are presented.
+The **WHOData** project aims to **tidy** the [World Health Organisation's (WHO)](www.who.int) mortality data using R. This is a *group* exercise to help some newcomers learn about cleaning and manipulating data using the R **tidyverse** (<https://github.com/tidyverse/tidyverse>). Please install the *tidyverse* before you start.
+
+The following steps can be used as guide to work your way through this challenge. Please use the `WHOMortalityData.Rmd` file to get started as it outlines some of the key steps.
 
 * Data source: <http://www.who.int/healthinfo/mortality_data/en/>
   + It is assumed that data has been downloaded
+* Install the **tidyverse** packages using `install.packages("tidyverse")`
 * Reading in the WHO mortality data
 * Reading the International Classificaion of Diseases data
 * Keep the **neoplasm**, **melanoma**, **lymphoma** and **leukaemia** data for ICD10 part 1
@@ -21,4 +24,4 @@ In this document, the steps to *tidy* the [World Health Organisation's (WHO)](ww
 * Next steps will defined later
   * Sumamry graphs
   * Summary tables
-  
+ 
