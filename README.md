@@ -1,5 +1,5 @@
 # WHOData
-## World Health Origanisation's (WHO) Mortality Data
+## World Health Organisation's (WHO) Mortality Data
 
 The **WHOData** project aims to **tidy** the [World Health Organisation's (WHO)](www.who.int) mortality data using R. This is a *group* exercise to help some newcomers learn about cleaning and manipulating data using the R **tidyverse** (<https://github.com/tidyverse/tidyverse>). Please install the *tidyverse* before you start.
 
