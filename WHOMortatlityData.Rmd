@@ -7,23 +7,22 @@ output: html_document
 
 In this document, the steps to *tidy* the [World Health Organisation's (WHO)](www.who.int) mortality data for use in R are documented. The following steps are presented.
 
-* Data source: <http://www.who.int/healthinfo/mortality_data/en/>
-  + It is assumed that data has been downloaded
 * Reading in the WHO mortality data
-* Reading the International Classificaion of Diseases data
-* Keep the **neoplasm**, **melanoma**, **lymphoma** and **leukaemia** data for ICD10 part 1
-  + Tranform the data into long format for the number of deaths
-* Transform the population data in long format
-* Merge the long population data to the long neoplasm data
+* Keeping the **neoplasm**, **melanoma**, **lymphoma** and **leukaemia** data for ICD10 part 1
+* Reading in the population data
+* Merging the population data to the neoplasm data
   + Care has to be taken with respect to the format of the age groups. 
   + Combine the youngest age groups into a new 0-4 years. 
-  + Consider adding an **all** age group category (**not urgent**)
-* Calculate the mortality rate per 100,000 population in a new variable
+  + Transform the neoplasm and population datasets from wide to long before merging.
+  
+* Calculating the mortality rate per 100,000 population in a new variable
   + rate = (100000*deaths)/pop
-* Write a function that will extract data based on country, cause of death, year and sex
+* Writing a function that will extract data based on country, cause of death, year and sex
   + If any of these are left blank then all the data is extracted
   + A data frame containing the requested data should be returned.
-* Next steps will defined later
+  
+* Next steps will be defined later
+  * Reading the International Classificaion of Diseases data
   * Sumamry graphs
   * Summary tables
   
@@ -31,24 +30,41 @@ In this document, the steps to *tidy* the [World Health Organisation's (WHO)](ww
 
 ## Data source
 
-The data was downloaded from <http://www.who.int/healthinfo/mortality_data/en/>. It is assumed that data has been downloaded and resides in a directory "OrigData"
+The data was downloaded from <http://www.who.int/healthinfo/mortality_data/en/>. It is assumed that data has been downloaded and resides in a directory "OrigData". The required files are:
 
-## Reading in the WHO mortality data
+* MortIcd7
+* MortIcd8
+* MortIcd9
+* MortIcd10_part1
+* MontIcd10_part2
+* pop
 
-The following code will automatically read in the WHO mortality data.
-```{r ReadWHOdata, echo=FALSE}
-# Load libraries
+
+## Downloading libraries
+
+```{r DownloadLibraries, echo=FALSE}
 library(stringr)
 library(readr)
 library(tibble)
+library(plyr)
+library(xml2)
+```
+
+## Reading in the WHO mortality data
+
+The following code will automatically read in the WHO mortality data. For now, we will read only the Morticd10_part1.
+
+```{r ReadWHOdata, echo=FALSE}
 
 # Set the directory where you have saved the data. 
 # This is not a great solution but it works and is easier for the moment, Later it should change.
 setwd("OrigData/")
 
-# Select the data files (exclude .zip, .doc, .xls)
-csvWHO <- list.files(path=".", full.names = FALSE) %>%
-          str_subset("^((?!zip|doc|xls).)*$")
+# Select the data file
+csvWHO <- "Morticd10_part1"
+
+# If we wanted to read all data files( excluding .zip, .doc, .xls)
+# csvWHO <- list.files(path=".", full.names = FALSE) %>% str_subset("^((?!zip|doc|xls).)*$")
 
 # Use the lapply to read all the data into one list
 dataList <- lapply(csvWHO, read_csv, guess_max = min(300000, Inf))
@@ -60,58 +76,242 @@ list2env(dataList, envir=.GlobalEnv)
 
 # dataList is not longer needed so we will remove it.
 rm(dataList)
+
 # Removing the ICD 7, 8, 9 and 10 part 2 data as we will not use them for the moment.
 # Also we do not want to have problems with the memory 
-rm(morticd7, morticd8, morticd9, morticd10_part2)
+# rm(morticd7, morticd8, morticd9, morticd10_part2) # Only necessary when we read all data files.
 
 # Some garbage collection to free up the memory (although this is something that is
 # automatically by kernel). In future we may not need this step.
 gc()
 ```
 
-## Reading the International Classificaion of Diseases data
+## Renaming columns
 
-**Joana:** Please read in the data form the word document here.
+Columns Deaths1,...,Deaths26 are given more more descriptive names. These column names will also be used in the population dataset to allow merging the two.
 
-```{r readICDdata, echo=TRUE}
-library(xml2)
+```{r renameAgeCols_in_Deaths}
+renamed_morticd10_part1 <- morticd10_part1 %>%
+  rename(c("Deaths1"="AllAges")) %>%
+  rename(c("Deaths2"="Age0")) %>%
+  rename(c("Deaths3"="Age1")) %>%
+  rename(c("Deaths4"="Age2")) %>%
+  rename(c("Deaths5"="Age3")) %>%
+  rename(c("Deaths6"="Age4")) %>%
+  rename(c("Deaths7"="Age5to9")) %>%
+  rename(c("Deaths8"="Age10to14")) %>%
+  rename(c("Deaths9"="Age15to19")) %>%
+  rename(c("Deaths10"="Age20to24")) %>%
+  rename(c("Deaths11"="Age25to29")) %>%
+  rename(c("Deaths12"="Age30to34")) %>%
+  rename(c("Deaths13"="Age35to39")) %>%
+  rename(c("Deaths14"="Age40to44")) %>%
+  rename(c("Deaths15"="Age45to49")) %>%
+  rename(c("Deaths16"="Age50to54")) %>%
+  rename(c("Deaths17"="Age55to59")) %>%
+  rename(c("Deaths18"="Age60to64")) %>%
+  rename(c("Deaths19"="Age65to69")) %>%
+  rename(c("Deaths20"="Age70to74")) %>%
+  rename(c("Deaths21"="Age75to79")) %>%
+  rename(c("Deaths22"="Age80to84")) %>%
+  rename(c("Deaths23"="Age85to89")) %>%
+  rename(c("Deaths24"="Age90to94")) %>%
+  rename(c("Deaths25"="Age95More")) %>%
+  rename(c("Deaths26"="AgeUnspecified"))
 
+head(renamed_morticd10_part1)
+```
+
+## 3)	Drop columns IM_Frmat, IM_Deaths1…, IM_Deaths4
+
+For now, we won't go to the detail given by these age groups. 
+
+```{r DropAgeColumns_in_Deaths}
+reduced_morticd10 <- select(renamed_morticd10_part1, -IM_Frmat, -IM_Deaths1, -IM_Deaths2, -IM_Deaths3, -IM_Deaths4)
+head(reduced_morticd10)
+```
+
+## Create new column Age0to4 in the deaths dataset
+
+In order to create a new column with the deaths for ages 0 to 4, it is useful to transform the NA's in 0 and then simply to create a new column equal to the sum of columns Age0, Age1, Age2, Age3 and Age4.
+
+```{r NewColumnAge0to4_in_Deaths}
+# Replace NA's in these columns by 0's
+reduced_morticd10[c("Age0","Age1","Age2","Age3","Age4")][is.na(reduced_morticd10[c("Age0","Age1","Age2","Age3","Age4")])] <- 0
+
+# Create new column Age0to4
+reduced_morticd10$Age0to4 <- reduced_morticd10$Age0 + reduced_morticd10$Age1 + reduced_morticd10$Age2 + reduced_morticd10$Age3 + reduced_morticd10$Age4
+
+reduced_morticd10
+```
+
+## 6)	Keep neoplasms, leukaemias, melanomas and lymphoma. Drop columns Cause.
+
+Once we create new datasets only for a specific disease, we can drop the column Cause.
+
+```{r keepNeoplasm}
+# First, keep only Neoplasm
+neoplasm_deaths <- reduced_morticd10 %>% filter(Cause == 1026) %>% select(-Cause)
+filter(neoplasm_deaths,List!=101) # Note that all records have List == 101
+```
+
+```{r keepMelanoma}
+# First, keep only Neoplasm
+melanoma_deaths <- reduced_morticd10 %>% filter(Cause == 1035) %>% select(-Cause)
+filter(melanoma_deaths,List!=101) # All records have List == 101
+```
+
+```{r keepLymphoma}
+# First, keep only Neoplasm
+lymphoma_deaths <- reduced_morticd10 %>% filter(Cause == 1043) %>% select(-Cause)
+filter(lymphoma_deaths,List!=101) # All records, List == 101
+```
+
+```{r keepLeukaemia}
+# First, keep only Neoplasm
+leukaemia_deaths <- reduced_morticd10 %>% filter(Cause == 1045) %>% select(-Cause)
+filter(leukaemia_deaths,List!=101)
+```
+
+## Drop column List in deaths dataset
+
+By observing leukaemia_deaths, melanoma_deaths, neoplasm_deaths and lymphoma_deaths, we can see that all their records have List == 101. Therefore, we can simply drop this column.
+
+```{r DropListColumn}
+neoplasm_deaths <- select(neoplasm_deaths,-List)
+lymphoma_deaths <- select(lymphoma_deaths,-List)
+melanoma_deaths <- select(melanoma_deaths,-List)
+leukaemia_deaths<- select(leukaemia_deaths,-List)
+```
+
+## Transform Deaths from wide to long (neoplasm dataset)
+
+This is done by grouping columns Age0, ..., Age26 into 2 new columns AgeGroup and NDeaths (number of deaths).
+
+```{r WideToLongNeoplasm}
+# Gather columns Deaths1, ..., IM_Deaths4 into 2 new columns AgeGroup and NDeaths
+long_neoplasm_deaths <- neoplasm_deaths %>%
+  gather(AgeGroup, NDeaths, AllAges:Age0to4)
+
+head(long_neoplasm_deaths)
 ```
 
 
-### Keep the **neoplasm** data for ICD10 parts 1 
+## Read the population dataset
 
-**To do:** Tranform the data into long format for the number of deaths
-
-**Hints:** Use `gather()`, `filter()`, `str_to_upper()` (or an case insensitive regex to select neoplasm data). 
-
-```{r keepNeoplasm, echo=TRUE}
-library(dplyr)
-
-
+```{r ReadPop}
+# Reading the csv file
+csvPOP <- "pop"
+dataList <- lapply(csvPOP, read_csv, guess_max = min(300000, Inf))
+names(dataList) <- str_to_lower(csvPOP) 
+list2env(dataList, envir=.GlobalEnv) 
 ```
 
+## Change the age column names in population dataset
+
+In order to match with the column names in the deaths datasets and allow merging, we need to rename the columns in the population dataset too.
+
+```{r RenameColsPop}
+renamed_pop <- pop %>%
+  rename(c("Pop1"="AllAges")) %>%
+  rename(c("Pop2"="Age0")) %>%
+  rename(c("Pop3"="Age1")) %>%
+  rename(c("Pop4"="Age2")) %>%
+  rename(c("Pop5"="Age3")) %>%
+  rename(c("Pop6"="Age4")) %>%
+  rename(c("Pop7"="Age5to9")) %>%
+  rename(c("Pop8"="Age10to14")) %>%
+  rename(c("Pop9"="Age15to19")) %>%
+  rename(c("Pop10"="Age20to24")) %>%
+  rename(c("Pop11"="Age25to29")) %>%
+  rename(c("Pop12"="Age30to34")) %>%
+  rename(c("Pop13"="Age35to39")) %>%
+  rename(c("Pop14"="Age40to44")) %>%
+  rename(c("Pop15"="Age45to49")) %>%
+  rename(c("Pop16"="Age50to54")) %>%
+  rename(c("Pop17"="Age55to59")) %>%
+  rename(c("Pop18"="Age60to64")) %>%
+  rename(c("Pop19"="Age65to69")) %>%
+  rename(c("Pop20"="Age70to74")) %>%
+  rename(c("Pop21"="Age75to79")) %>%
+  rename(c("Pop22"="Age80to84")) %>%
+  rename(c("Pop23"="Age85to89")) %>%
+  rename(c("Pop24"="Age90to94")) %>%
+  rename(c("Pop25"="Age95More")) %>%
+  rename(c("Pop26"="AgeUnspecified"))
 
 
-### Transform the population data in long format
-
-
-```{r popLong, echo=TRUE}
-
+head(renamed_pop)
 ```
 
+## Create new column Age0to4 in population dataset
+
+In order to create a new column with the deaths for ages 0 to 4, it is useful to transform the NA's in 0 and then simply to create a new column equal to the sum of columns Age0, Age1, Age2, Age3 and Age4.
+
+```{r NewAge0to4_in_Pop}
+# Replace NA's in these columns by 0's
+renamed_pop[c("Age0","Age1","Age2","Age3","Age4")][is.na(renamed_pop[c("Age0","Age1","Age2","Age3","Age4")])] <- 0
+
+# Create new column Age0to4
+renamed_pop$Age0to4 <- renamed_pop$Age0 + renamed_pop$Age1 + renamed_pop$Age2 + renamed_pop$Age3 + renamed_pop$Age4
+head(renamed_pop)
+```
+
+## Drop Lb (Live birth) column in population dataset
+
+We will disregards this information for now.
+
+```{r DropLbPop}
+renamed_pop <- select(renamed_pop,-Lb)
+head(renamed_pop)
+```
+
+## Transform population dataset from wide to long
+
+```{r PopWideToLong}
+long_population <- renamed_pop %>%
+  gather(AgeGroup, NPop, AllAges:Age0to4) # Gather Pop1, ..., Pop26 and Lb into 2 new columns
+
+head(long_population)
+```
 
 ### Merging the population data to the neoplasm mortality data
 
-  * Care has to be taken with respect to the format of the age groups. 
-  * Combine the youngest age groups into a new 0-4 years. 
-  * Consider adding an **all** age group category (**not urgent**)
-  * Calculate the mortality rate per 100,000 population in a new variable
-    + rate = (100000*deaths)/pop
+* Care has to be taken with respect to the format of the age groups. 
+  + The naming for age groups has been made uniform for the 2 datasets.
+* Combine the youngest age groups into a new 0-4 years. 
+  + A new age group for 0-4 years has been created in the 2 datasets.
+* Consider adding an **all** age group category (**not urgent**)
+  + This age group already existed in the original dataset.
+* Calculate the mortality rate per 100,000 population in a new variable
+  + rate = (100000*deaths)/pop
 
-```{r mortalityPop, echo=TRUE}
-
+```{r MergeDeathsAndPop}
+# It is to be noted that long_population has records for the years 1950-2015 while long_neoplasm_deaths has only the years 1996-2004.
+neoplasm_deathsAndPop <- merge(long_neoplasm_deaths,long_population)
+neoplasm_deathsAndPop
 ```
+
+Before calculating the mortality rate, we need to eliminate records with NPop equal to 0 or NA. Also we need to transform all NDeaths=NA to NDeaths=0.
+
+```{r Clear_DeathsAndPop}
+# Filter zero or NA populations
+neoplasm_deathsAndPop <- neoplasm_deathsAndPop %>%
+  filter(NPop != 0) %>% 
+  filter(!is.na(NPop))
+
+# Transform NA deaths to zero deaths
+neoplasm_deathsAndPop$NDeaths[is.na(neoplasm_deathsAndPop$NDeaths)] <- 0
+
+neoplasm_deathsAndPop
+```
+
+Create new column with the mortality rate per 100000:
+```{r CalcMortalityRate}
+neoplasm_deathsAndPop$MortRate <- 100000 * neoplasm_deathsAndPop$NDeaths/neoplasm_deathsAndPop$NPop
+head(neoplasm_deathsAndPop)
+```
+
 
 
 
@@ -135,8 +335,16 @@ getWHOdata <- function(country, causes, year, sex){
 ### Next steps
 
 Once the above steps have been completed, the next steps will be defined. They will include:
+  * Reading the International Classificaion of Diseases data
   * Sumamry graphs
   * Summary tables
   
 
+## Reading the International Classificaion of Diseases data
 
+**Joana:** Please read in the data form the word document here.
+
+```{r readICDdata, echo=TRUE}
+library(xml2)
+
+```
